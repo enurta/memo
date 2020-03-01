@@ -18,31 +18,55 @@ def objective(trial):
     }
     
     cv_results = lgb.cv(lgbm_params, lgb_train, nfold=5, stratified=False, num_boost_round=500)
-    
-#     kf = KFold(5)
-    
-#     cv_score = []
-    
-#     for train_idx, val_idx in kf.split(feature_df, train_df):
-#         x_trn, x_val = feature_df.iloc[train_idx], feature_df.iloc[val_idx]
-#         y_trn, y_val = train_df.iloc[train_idx], train_df.iloc[val_idx]
-        
-#         y_trn = y_trn.target
-#         y_val = y_val.target
-        
-#         lgb_train = lgb.Dataset(x_trn, y_trn)
-#         lgb_eval = lgb.Dataset(x_val, y_val, reference=lgb_train)
-        
-#         model = lgb.train(lgbm_params, lgb_train, num_boost_round=100)
-        
-#         pred = model.predict(x_val)
-        
-#         score = roc_auc_score(y_val, pred)
-#         cv_score.append(score)
+  
     
     #print(cv_results)
     score = cv_results['rmse-mean'][-1]
     
+    return score
+
+study = optuna.create_study(direction='minimize', sampler=optuna.samplers.RandomSampler(seed=1))
+study.optimize(objective, n_trials=1000)
+
+
+
+def objective(trial):
+    
+    num_l = trial.suggest_int('num_l', 10, 100)
+    max_d = trial.suggest_int('max_d', -1, 10)
+    lr = trial.suggest_discrete_uniform('lr', 0.01, 1.0, 0.01)
+    subsample = trial.suggest_discrete_uniform('subsample', 0.6, 0.95, 0.05)
+    colsample_bytree = trial.suggest_discrete_uniform('max_f', 0.01, 1.0, 0.01)
+    gamma = trial.suggest_loguniform('gamma', 1e-8, 1.0)
+    max_bin = trial.suggest_int('max_bin', 64, 512)
+    bagging_freq = trial.suggest_int('freq', 0, 10)
+    
+            
+    model = lgb.LGBMRegressor(
+        boosting_type='gbdt',
+        num_leaves=num_l,
+        max_depth=max_d,
+        learning_rate=lr,
+        n_estimators=500,
+        #subsample_for_bin
+        #objective
+        #class_weight
+        min_split_gain=gamma,
+        #min_child_weight
+        #min_child_samples
+        subsample=subsample,
+        bagging_freq=bagging_freq,
+        #subsample_freq
+        colsample_bytree=colsample_bytree,
+        max_bin=max_bin,
+        #reg_alpha
+        #reg_lambda
+        random_state=0
+    )
+    
+    score = cross_val_score(model, x_train, y_train, cv=5, scoring='neg_mean_squared_error', n_jobs=-1).mean()
+    score = np.sqrt(score*-1)
+
     return score
 
 study = optuna.create_study(direction='minimize', sampler=optuna.samplers.RandomSampler(seed=1))
